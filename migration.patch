@@ -1,0 +1,8 @@
+--- sources/promises.move
++++ sources/promises.move
+@@ -7 +7 @@
+-    struct Promise has key {
++    public struct Promise has key {
+@@ -13 +13 @@
+-    struct PromiseStorage has key {
++    public struct PromiseStorage has key {
