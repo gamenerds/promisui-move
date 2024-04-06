@@ -32,6 +32,8 @@ module promisui::promises {
             userAddy: tx_context::sender(ctx)
         };
 
+        // transfer::transfer(promise, storage); //<-- does not build, says "storage" must be an address not an obj
+
         let obj_id = object::id(storage);
         let addy = object::id_to_address(&obj_id);
 
