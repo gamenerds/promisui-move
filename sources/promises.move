@@ -4,6 +4,7 @@ module promisui::promises {
     use sui::object::{Self, UID};
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
+    // use std::debug;
 
     public struct Promise has key {
         id: UID, 
@@ -23,19 +24,21 @@ module promisui::promises {
 
     public fun promise_create(text: vector<u8>, 
                                 storage: &mut PromiseStorage,
-                                ctx: &mut TxContext) {
+                                ctx: &mut TxContext): address {
         let promise = Promise {
             id: object::new(ctx),
             text: string::utf8(text),
             userAddy: tx_context::sender(ctx)
         };
 
-        // transfer::transfer(promise, storage); //<-- does not build, says "storage" must be an address not an obj
-
         let obj_id = object::id(storage);
-        let addy = object::id_to_address(&obj_id);
+        let storage_addy = object::id_to_address(&obj_id);
 
-        transfer::transfer(promise, addy);
+        let p_id = object::id(&promise);
+
+        transfer::transfer(promise, storage_addy);
+
+        object::id_to_address(&p_id)
     }
 
     // accessors to read properties
@@ -47,7 +50,7 @@ module promisui::promises {
         promise.userAddy
     }
 
-    public fun receive_promise<T:key>(storage: &mut PromiseStorage, promise: Receiving<T>): T {
+    public fun receive_promise(storage: &mut PromiseStorage, promise: Receiving<Promise>): Promise {
         transfer::receive(&mut storage.id, promise)
     }
 
@@ -68,7 +71,6 @@ module promisui::promises {
     #[test_only] use sui::test_scenario;
     #[test_only] use std::vector;
     #[test_only] use sui::vec_map;
-    #[test_only] use std::debug;
 
     #[test]
     // This test uses `test_scenario` to emulate actions performed by 3 accounts.
@@ -107,6 +109,8 @@ module promisui::promises {
         let mut sent_ids = test_scenario::transferred_to_account(&prev_effects);
         let mut events_num = test_scenario::num_user_events(&prev_effects);
 
+        // debug::print(&created_ids);
+
         assert!(vector::length(&created_ids) == 1, 0);
         assert!(vector::length(&shared_ids) == 1, 1);
         assert!(vec_map::size(&sent_ids) == 0, 2);
@@ -116,34 +120,32 @@ module promisui::promises {
 
         test_scenario::next_tx(&mut scenario, user);
         {
-            // let ctx = test_scenario::ctx(&mut scenario);
+            let mut storage = test_scenario::take_shared<PromiseStorage>(&scenario);
+            let ctx = test_scenario::ctx(&mut scenario);
 
-            let storage = test_scenario::take_shared<PromiseStorage>(&scenario);
+            promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", &mut storage, ctx);
 
-            let obj_id = object::id(&storage);
-            let addy = object::id_to_address(&obj_id);
-            
-            // promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", &mut storage, ctx);
-
-            debug::print(&addy);
+            // debug::print(&p_id);
 
             test_scenario::return_shared(storage);
 
             // now return the store to the pool
         };
 
-        // prev_effects = test_scenario::next_tx(&mut scenario, baron);
+        prev_effects = test_scenario::next_tx(&mut scenario, user);
 
-        // // make assertions on the effects of the first tx (init)
-        // created_ids = test_scenario::created(&prev_effects);
-        // shared_ids = test_scenario::shared(&prev_effects);
-        // sent_ids = test_scenario::transferred_to_account(&prev_effects);
-        // events_num = test_scenario::num_user_events(&prev_effects);
+        // make assertions on the effects of the first tx (init)
+        created_ids = test_scenario::created(&prev_effects);
+        shared_ids = test_scenario::shared(&prev_effects);
+        sent_ids = test_scenario::transferred_to_account(&prev_effects);
+        events_num = test_scenario::num_user_events(&prev_effects);
 
-        // assert!(vector::length(&created_ids) == 1, 0);
-        // assert!(vector::length(&shared_ids) == 0, 1);
-        // assert!(vec_map::size(&sent_ids) == 1, 2);
-        // assert!(events_num == 0, 3);
+        // debug::print(&sent_ids);
+
+        assert!(vector::length(&created_ids) == 1, 4);
+        assert!(vector::length(&shared_ids) == 1, 5);
+        assert!(vec_map::size(&sent_ids) == 1, 6);
+        assert!(events_num == 0, 7);
 
         test_scenario::end(scenario);
     }

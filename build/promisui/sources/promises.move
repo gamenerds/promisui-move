@@ -1,9 +1,10 @@
 #[allow(duplicate_alias)]
 module promisui::promises {
-    use sui::transfer;
+    use sui::transfer::{Self, Receiving};
     use sui::object::{Self, UID};
     use sui::tx_context::{Self, TxContext};
     use std::string::{Self, String};
+    // use std::debug;
 
     public struct Promise has key {
         id: UID, 
@@ -22,19 +23,22 @@ module promisui::promises {
     }
 
     public fun promise_create(text: vector<u8>, 
-                                storageAddy: address,
-                                ctx: &mut TxContext) {
+                                storage: &mut PromiseStorage,
+                                ctx: &mut TxContext): address {
         let promise = Promise {
             id: object::new(ctx),
             text: string::utf8(text),
             userAddy: tx_context::sender(ctx)
         };
 
-        //let storage = transfer::take_shared<PromiseStorage>(&ctx);
+        let obj_id = object::id(storage);
+        let storage_addy = object::id_to_address(&obj_id);
 
-        transfer::transfer(promise, storageAddy);
+        let p_id = object::id(&promise);
 
-        //tx_context::return_shared(storage);
+        transfer::transfer(promise, storage_addy);
+
+        object::id_to_address(&p_id)
     }
 
     // accessors to read properties
@@ -44,6 +48,10 @@ module promisui::promises {
 
     public fun userAddy(promise: &Promise): address {
         promise.userAddy
+    }
+
+    public fun receive_promise(storage: &mut PromiseStorage, promise: Receiving<Promise>): Promise {
+        transfer::receive(&mut storage.id, promise)
     }
 
     // === Tests ===
@@ -63,7 +71,6 @@ module promisui::promises {
     #[test_only] use sui::test_scenario;
     #[test_only] use std::vector;
     #[test_only] use sui::vec_map;
-    #[test_only] use std::debug;
 
     #[test]
     // This test uses `test_scenario` to emulate actions performed by 3 accounts.
@@ -77,10 +84,10 @@ module promisui::promises {
     // objects from account inventory and shared pool, and check transaction
     // effects.
     public fun test_promise_transactions() {
-        let (sasha, baron) = (@0x1, @0x22);
+        let (admin, user) = (@0x1, @0x22);
 
         // create a test scenario with sender; initiates the first transaction
-        let mut scenario = test_scenario::begin(sasha);
+        let mut scenario = test_scenario::begin(admin);
 
         // === First transaction ===
 
@@ -94,13 +101,15 @@ module promisui::promises {
         // `next_tx` is used to initiate a new transaction in the scenario and
         // set the sender to the specified address. It returns `TransactionEffects`
         // which can be used to check object changes and events.
-        let mut prev_effects = test_scenario::next_tx(&mut scenario, baron);
+        let mut prev_effects = test_scenario::next_tx(&mut scenario, user);
 
         // make assertions on the effects of the first tx (init)
         let mut created_ids = test_scenario::created(&prev_effects);
         let mut shared_ids = test_scenario::shared(&prev_effects);
         let mut sent_ids = test_scenario::transferred_to_account(&prev_effects);
         let mut events_num = test_scenario::num_user_events(&prev_effects);
+
+        // debug::print(&created_ids);
 
         assert!(vector::length(&created_ids) == 1, 0);
         assert!(vector::length(&shared_ids) == 1, 1);
@@ -109,49 +118,35 @@ module promisui::promises {
 
         // === Second Tx ===
 
-        test_scenario::next_tx(&mut scenario, baron);
+        test_scenario::next_tx(&mut scenario, user);
         {
-            // let ctx = test_scenario::ctx(scenario);
+            let mut storage = test_scenario::take_shared<PromiseStorage>(&scenario);
+            let ctx = test_scenario::ctx(&mut scenario);
 
-            // promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", ctx);
+            promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", &mut storage, ctx);
 
-            //assert!(prom_id , 1);
-
-
-            let storage = test_scenario::take_shared<PromiseStorage>(&scenario);
-
-            let obj_id = object::id(&storage);
-            debug::print(&object::id_to_address(&obj_id));
+            // debug::print(&p_id);
 
             test_scenario::return_shared(storage);
 
             // now return the store to the pool
         };
 
-        // prev_effects = test_scenario::next_tx(&mut scenario, baron);
+        prev_effects = test_scenario::next_tx(&mut scenario, user);
 
-        // // make assertions on the effects of the first tx (init)
-        // created_ids = test_scenario::created(&prev_effects);
-        // shared_ids = test_scenario::shared(&prev_effects);
-        // sent_ids = test_scenario::transferred_to_account(&prev_effects);
-        // events_num = test_scenario::num_user_events(&prev_effects);
+        // make assertions on the effects of the first tx (init)
+        created_ids = test_scenario::created(&prev_effects);
+        shared_ids = test_scenario::shared(&prev_effects);
+        sent_ids = test_scenario::transferred_to_account(&prev_effects);
+        events_num = test_scenario::num_user_events(&prev_effects);
 
-        // assert!(vector::length(&created_ids) == 1, 0);
-        // assert!(vector::length(&shared_ids) == 0, 1);
-        // assert!(vec_map::size(&sent_ids) == 1, 2);
-        // assert!(events_num == 0, 3);
+        // debug::print(&sent_ids);
+
+        assert!(vector::length(&created_ids) == 1, 4);
+        assert!(vector::length(&shared_ids) == 1, 5);
+        assert!(vec_map::size(&sent_ids) == 1, 6);
+        assert!(events_num == 0, 7);
 
         test_scenario::end(scenario);
-
-
-        // let promise = Promise {
-        //     id: object::new(&mut ctx),
-        //     text: string::utf8(b"I'll love you always"),
-        //     userAddy: @0x25
-        // };
-
-        // assert!(promise_text(&promise) == string::utf8(b"I'll love you always") && userAddy(&promise) == @0x25, 1);
-
-        // transfer::transfer(promise, dummy_addy);
     }
 }
