@@ -10,6 +10,7 @@ module promisui::promises {
         id: UID, 
         text: String,
         userAddy: address,
+        timestamp: u32, // unix timestamp, seconds since 1/1/1970
     }
 
     public struct PromiseStorage has key {
@@ -23,12 +24,14 @@ module promisui::promises {
     }
 
     public fun promise_create(text: vector<u8>, 
+                                timestamp: u32,
                                 storage: &mut PromiseStorage,
                                 ctx: &mut TxContext): address {
         let promise = Promise {
             id: object::new(ctx),
             text: string::utf8(text),
-            userAddy: tx_context::sender(ctx)
+            userAddy: tx_context::sender(ctx),
+            timestamp: timestamp
         };
 
         let obj_id = object::id(storage);
@@ -48,6 +51,10 @@ module promisui::promises {
 
     public fun userAddy(promise: &Promise): address {
         promise.userAddy
+    }
+
+    public fun timestamp(promise: &Promise): u32 {
+        promise.timestamp
     }
 
     public fun receive_promise(storage: &mut PromiseStorage, promise: Receiving<Promise>): Promise {
@@ -123,7 +130,7 @@ module promisui::promises {
             let mut storage = test_scenario::take_shared<PromiseStorage>(&scenario);
             let ctx = test_scenario::ctx(&mut scenario);
 
-            promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", &mut storage, ctx);
+            promise_create(b"I will eat my own shit if BAYC floor dips below 15 eth.", 1712642198, &mut storage, ctx);
 
             // debug::print(&p_id);
 
